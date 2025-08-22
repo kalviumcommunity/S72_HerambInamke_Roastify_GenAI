@@ -5,6 +5,7 @@ import { measureAsync, extractUsageMetadata, basicCorrectnessCheck } from "./src
 import { buildDynamicPrompt } from "./src/prompts/dynamicPrompt.js";
 import { buildMultiShotPrompt } from "./src/prompts/multiShot.js";
 import { buildOneShotPrompt } from "./src/prompts/oneShot.js";
+import { buildStopSequencePrompt, getStopSequences } from "./src/prompts/stopSequence.js";
 
 async function runZeroShot() {
   try {
@@ -194,9 +195,70 @@ async function runMultiShotPrompting() {
   }
 }
 
+async function runStopSequencePrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running stop sequence prompting...");
+
+    const prompt = buildStopSequencePrompt({
+      subject: "my social media habits",
+      constraints: [
+        "≤ 25 words",
+        "No NSFW or hateful content",
+        "Keep it playful"
+      ],
+      styleHints: [
+        "Prefer wordplay",
+        "Be concise",
+      ],
+      example: {
+        input: "My exercise routine",
+        output: "Your workout plan is like a mystery novel—everyone knows there's a plot, but no one's seen the action.",
+      },
+      stopSequences: ["END", "STOP", "FINISH"]
+    });
+
+    // Get stop sequences for the API call
+    const stopSequences = getStopSequences();
+    
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "stopSequence-generateContent",
+      async () => await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          stopSequences: stopSequences
+        }
+      })
+    );
+
+    if (!ok) {
+      throw execError;
+    }
+
+    const text = result.response.text();
+    const correctness = basicCorrectnessCheck(text);
+    const usage = extractUsageMetadata(result);
+
+    success("Stop Sequence Prompt Output:\n" + text);
+
+    info(
+      `Stop Sequence -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
+
+    info(
+      "Stop sequences control where AI responses end by specifying tokens that signal completion, preventing runaway generation and ensuring consistent output length."
+    );
+  } catch (err) {
+    error(`Error running stop sequence prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
   await runOneShotPrompting();
   await runMultiShotPrompting();
+  await runStopSequencePrompting();
 })();
