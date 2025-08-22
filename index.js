@@ -6,6 +6,7 @@ import { buildDynamicPrompt } from "./src/prompts/dynamicPrompt.js";
 import { buildMultiShotPrompt } from "./src/prompts/multiShot.js";
 import { buildOneShotPrompt } from "./src/prompts/oneShot.js";
 import { buildStopSequencePrompt, getStopSequences } from "./src/prompts/stopSequence.js";
+import { buildStructuredOutputPrompt, validateStructuredOutput } from "./src/prompts/structured.js";
 
 async function runZeroShot() {
   try {
@@ -255,10 +256,81 @@ async function runStopSequencePrompting() {
   }
 }
 
+async function runStructuredOutputPrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running structured output prompting...");
+
+    const prompt = buildStructuredOutputPrompt({
+      subject: "my procrastination habits",
+      constraints: [
+        "≤ 25 words",
+        "No NSFW or hateful content",
+        "Keep it playful"
+      ],
+      styleHints: [
+        "Prefer wordplay",
+        "Be concise",
+      ],
+      example: {
+        input: "My time management",
+        output: {
+          roast: "Your calendar's a plot twist—every plan disappears right before the climax.",
+          tone: "witty",
+          wordCount: 15,
+          metaphor: "plot twist",
+          category: "time management"
+        }
+      }
+    });
+
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "structuredOutput-generateContent",
+      async () => await model.generateContent(prompt)
+    );
+
+    if (!ok) {
+      throw execError;
+    }
+
+    const text = result.response.text();
+    
+    // Validate structured output
+    const validation = validateStructuredOutput(text);
+    const correctness = validation.isValid ? 
+      { isLikelyValid: true, reason: validation.reason } : 
+      { isLikelyValid: false, reason: validation.reason };
+    
+    const usage = extractUsageMetadata(result);
+
+    success("Structured Output Prompt Output:\n" + text);
+    
+    if (validation.isValid) {
+      success("Structured Output Validation: SUCCESS");
+      success(`Parsed Data: ${JSON.stringify(validation.parsed, null, 2)}`);
+    } else {
+      error("Structured Output Validation: FAILED");
+    }
+
+    info(
+      `Structured Output -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
+
+    info(
+      "Structured output ensures consistent, parseable responses by enforcing specific JSON schemas, making AI outputs machine-readable and easier to process programmatically."
+    );
+  } catch (err) {
+    error(`Error running structured output prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
   await runOneShotPrompting();
   await runMultiShotPrompting();
   await runStopSequencePrompting();
+  await runStructuredOutputPrompting();
 })();
