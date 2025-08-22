@@ -554,13 +554,13 @@ async function runTopPPrompting() {
 }
 
 (async () => {
-  await runZeroShot();
-  await runDynamicPrompting();
-  await runOneShotPrompting();
-  await runMultiShotPrompting();
-  await runStopSequencePrompting();
-  await runStructuredOutputPrompting();
-  await runSystemUserPrompting();
-  await runTemperaturePrompting();
+  // await runZeroShot();
+  // await runDynamicPrompting();
+  // await runOneShotPrompting();
+  // await runMultiShotPrompting();
+  // await runStopSequencePrompting();
+  // await runStructuredOutputPrompting();
+  // await runSystemUserPrompting();
+  // await runTemperaturePrompting();
   await runTopPPrompting();
 })();
