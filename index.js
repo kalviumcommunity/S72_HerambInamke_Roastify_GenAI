@@ -4,6 +4,7 @@ import { zeroShotPrompt } from "./src/prompts/zeroShot.js";
 import { measureAsync, extractUsageMetadata, basicCorrectnessCheck } from "./src/utils/metrics.js";
 import { buildDynamicPrompt } from "./src/prompts/dynamicPrompt.js";
 import { buildMultiShotPrompt } from "./src/prompts/multiShot.js";
+import { buildOneShotPrompt } from "./src/prompts/oneShot.js";
 
 async function runZeroShot() {
   try {
@@ -90,6 +91,57 @@ async function runDynamicPrompting() {
   }
 }
 
+async function runOneShotPrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running one-shot prompting...");
+
+    const prompt = buildOneShotPrompt({
+      subject: "my budgeting skills",
+      constraints: [
+        "≤ 20 words",
+        "No NSFW or hateful content",
+        "Keep it playful"
+      ],
+      styleHints: [
+        "Prefer wordplay",
+        "Be concise",
+      ],
+      example: {
+        input: "My time management",
+        output: "Your calendar's a plot twist—every plan disappears right before the climax.",
+      }
+    });
+
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "oneShot-generateContent",
+      async () => await model.generateContent(prompt)
+    );
+
+    if (!ok) {
+      throw execError;
+    }
+
+    const text = result.response.text();
+    const correctness = basicCorrectnessCheck(text);
+    const usage = extractUsageMetadata(result);
+
+    success("One-Shot Prompt Output:\n" + text);
+
+    info(
+      `One-Shot -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
+
+    info(
+      "One-shot prompting provides exactly one example to set style/format before the request, useful when you want light guidance without heavy examples."
+    );
+  } catch (err) {
+    error(`Error running one-shot prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 async function runMultiShotPrompting() {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -145,5 +197,6 @@ async function runMultiShotPrompting() {
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
+  await runOneShotPrompting();
   await runMultiShotPrompting();
 })();
