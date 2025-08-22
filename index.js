@@ -3,6 +3,7 @@ import { info, success, error } from "./src/utils/logger.js";
 import { zeroShotPrompt } from "./src/prompts/zeroShot.js";
 import { measureAsync, extractUsageMetadata, basicCorrectnessCheck } from "./src/utils/metrics.js";
 import { buildDynamicPrompt } from "./src/prompts/dynamicPrompt.js";
+import { buildMultiShotPrompt } from "./src/prompts/multiShot.js";
 
 async function runZeroShot() {
   try {
@@ -89,7 +90,60 @@ async function runDynamicPrompting() {
   }
 }
 
+async function runMultiShotPrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running multi-shot prompting...");
+
+    const prompt = buildMultiShotPrompt({
+      subject: "my gym consistency",
+      constraints: [
+        "≤ 22 words",
+        "No NSFW or hateful content",
+        "Keep it playful"
+      ],
+      styleHints: [
+        "Prefer metaphors",
+        "Clever, not cruel",
+      ],
+      shots: [
+        { input: "My meal prep", output: "Your meal prep is a plot twist—planned on Sunday, missing by Monday." },
+        { input: "My small talk", output: "Your small talk is Wi‑Fi at the airport—visible, unstable, and everyone wants to leave." },
+        { input: "My sleep schedule", output: "Your sleep schedule is a group project—no one knows who's in charge and the result is chaos." },
+      ]
+    });
+
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "multiShot-generateContent",
+      async () => await model.generateContent(prompt)
+    );
+
+    if (!ok) {
+      throw execError;
+    }
+
+    const text = result.response.text();
+    const correctness = basicCorrectnessCheck(text);
+    const usage = extractUsageMetadata(result);
+
+    success("Multi-Shot Prompt Output:\n" + text);
+
+    info(
+      `Multi-Shot -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
+
+    info(
+      "Multi-shot prompting supplies several input→output examples to condition the model's style and format before the final query, improving consistency for similar tasks."
+    );
+  } catch (err) {
+    error(`Error running multi-shot prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
+  await runMultiShotPrompting();
 })();
