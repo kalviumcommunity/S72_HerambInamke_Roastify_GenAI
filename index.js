@@ -9,6 +9,7 @@ import { buildStopSequencePrompt, getStopSequences } from "./src/prompts/stopSeq
 import { buildStructuredOutputPrompt, validateStructuredOutput } from "./src/prompts/structured.js";
 import { buildSystemUserPrompt, validateRTFCCompliance } from "./src/prompts/systemUser.js";
 import { buildTemperaturePrompt, getTemperatureSettings, analyzeTemperatureImpact } from "./src/prompts/temperature.js";
+import { buildTopPPrompt, getTopPSettings, analyzeTopPImpact, compareTopPvsTemperature } from "./src/prompts/topP.js";
 
 async function runZeroShot() {
   try {
@@ -467,6 +468,91 @@ async function runTemperaturePrompting() {
   }
 }
 
+async function runTopPPrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running Top P prompting with different settings...");
+
+    const topPSettings = getTopPSettings();
+    const responses = [];
+    const metrics = [];
+
+    for (const topPSetting of topPSettings) {
+      info(`Testing Top P: ${topPSetting.value} (${topPSetting.name})`);
+      
+      const prompt = buildTopPPrompt({
+        subject: "my exercise routine",
+        topP: topPSetting.value,
+        constraints: [
+          "≤ 25 words",
+          "No NSFW or hateful content",
+          "Keep it playful"
+        ],
+        styleHints: [
+          "Prefer wordplay",
+          "Be concise",
+        ],
+        example: {
+          input: "My time management",
+          output: "Your calendar's a plot twist—every plan disappears right before the climax.",
+        }
+      });
+
+      const { ok, result, error: execError, responseMetrics } = await measureAsync(
+        `topP-${topPSetting.value}-generateContent`,
+        async () => await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            topP: topPSetting.value
+          }
+        })
+      );
+
+      if (!ok) {
+        error(`Error with Top P ${topPSetting.value}: ${execError}`);
+        continue;
+      }
+
+      const text = result.response.text();
+      const correctness = basicCorrectnessCheck(text);
+      const usage = extractUsageMetadata(result);
+
+      responses.push(text);
+      metrics.push({
+        topP: topPSetting.value,
+        name: topPSetting.name,
+        response: text,
+        correctness,
+        usage,
+        responseMetrics
+      });
+
+      success(`Top P ${topPSetting.value} Output:\n${text}`);
+      
+      info(
+        `${topPSetting.name} (${topPSetting.value}) -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+        `Efficiency: ${responseMetrics.durationMs} ms; ` +
+        `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+      );
+    }
+
+    // Analyze Top P impact across all responses
+    const impactAnalysis = analyzeTopPImpact(responses.map(r => r.response));
+    success("Top P Impact Analysis:");
+    success(impactAnalysis.summary);
+    success(`Length Variation: ${impactAnalysis.lengthVariation} words`);
+    success(`Vocabulary Diversity: ${impactAnalysis.vocabularyDiversity} unique words`);
+    success(`Quality Score: ${impactAnalysis.qualityScore}%`);
+    success(`Diversity Score: ${impactAnalysis.diversityScore}%`);
+
+    info(
+      "Top P (nucleus sampling) controls response diversity by limiting token selection to the most probable tokens, ensuring quality while maintaining creativity."
+    );
+  } catch (err) {
+    error(`Error running Top P prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
@@ -476,4 +562,5 @@ async function runTemperaturePrompting() {
   await runStructuredOutputPrompting();
   await runSystemUserPrompting();
   await runTemperaturePrompting();
+  await runTopPPrompting();
 })();
