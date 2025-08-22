@@ -5,10 +5,12 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.17.2",
-    "dotenv": "^17.2.1"
+    "dotenv": "^17.2.1",
+    "nodemon": "^3.1.10"
   }
 }

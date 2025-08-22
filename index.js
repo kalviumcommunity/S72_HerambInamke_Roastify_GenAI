@@ -1,17 +1,37 @@
 import genAI from "./src/config/gemini.js";
+import { info, success, error } from "./src/utils/logger.js";
+import { zeroShotPrompt } from "./src/prompts/zeroShot.js";
+import { measureAsync, extractUsageMetadata, basicCorrectnessCheck } from "./src/utils/metrics.js";
 
-async function main() {
+async function runZeroShot() {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running zero-shot prompt...");
 
-    const prompt = "Give me a funny roast about python snake in 1 line.";
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "zeroShot-generateContent",
+      async () => await model.generateContent(zeroShotPrompt)
+    );
 
-    const result = await model.generateContent(prompt);
+    if (!ok) {
+      throw execError;
+    }
 
-    console.log("AI Response:", result.response.text());
+    const text = result.response.text();
+    const correctness = basicCorrectnessCheck(text);
+    const usage = extractUsageMetadata(result);
+
+    success("Zero-Shot Prompt Output:\n" + text);
+
+    // Minimal evaluation summary
+    info(
+      `Evaluation -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
   } catch (err) {
-    console.error("Error:", err);
+    error(`Error running zero-shot prompt: ${err?.stack || err?.message || String(err)}`);
   }
 }
 
-main();
+runZeroShot();
