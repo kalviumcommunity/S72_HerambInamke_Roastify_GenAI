@@ -12,7 +12,7 @@ export function buildMultiShotPrompt({
       "Be concise",
     ],
     shots = [
-      { input: "My Wi-Fi speed", output: "Your Wi‑Fi moves like a mystery novel—lots of suspense, zero resolution." },
+      { input: "My Wi-Fi speed", output: "Your Wi-Fi moves like a mystery novel—lots of suspense, zero resolution." },
       { input: "My morning routine", output: "You hit snooze like it's a slot machine—pulling the lever and still losing time." },
       { input: "My coding style", output: "Your code reads like a haunted house—too many ghosts and nobody knows who called who." },
     ],
