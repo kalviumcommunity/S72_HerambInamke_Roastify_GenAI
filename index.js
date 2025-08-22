@@ -13,7 +13,7 @@ import { buildTopPPrompt, getTopPSettings, analyzeTopPImpact, compareTopPvsTempe
 
 async function runZeroShot() {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     info("Running zero-shot prompt...");
 
     const { ok, result, error: execError, metrics } = await measureAsync(
