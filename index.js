@@ -7,6 +7,7 @@ import { buildMultiShotPrompt } from "./src/prompts/multiShot.js";
 import { buildOneShotPrompt } from "./src/prompts/oneShot.js";
 import { buildStopSequencePrompt, getStopSequences } from "./src/prompts/stopSequence.js";
 import { buildStructuredOutputPrompt, validateStructuredOutput } from "./src/prompts/structured.js";
+import { buildSystemUserPrompt, validateRTFCCompliance } from "./src/prompts/systemUser.js";
 
 async function runZeroShot() {
   try {
@@ -326,6 +327,61 @@ async function runStructuredOutputPrompting() {
   }
 }
 
+async function runSystemUserPrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running system and user prompting with RTFC framework...");
+
+    const prompt = buildSystemUserPrompt({
+      subject: "my organizational skills",
+      specificTask: "Generate a witty roast about organization",
+      additionalContext: "Focus on desk organization and time management",
+      formatPreference: "detailed"
+    });
+
+    const { ok, result, error: execError, metrics } = await measureAsync(
+      "systemUser-generateContent",
+      async () => await model.generateContent(prompt)
+    );
+
+    if (!ok) {
+      throw execError;
+    }
+
+    const text = result.response.text();
+    
+    // Validate RTFC compliance
+    const rtfcValidation = validateRTFCCompliance(text, "organizational skills");
+    const correctness = rtfcValidation.isCompliant ? 
+      { isLikelyValid: true, reason: rtfcValidation.feedback } : 
+      { isLikelyValid: false, reason: rtfcValidation.feedback };
+    
+    const usage = extractUsageMetadata(result);
+
+    success("System & User Prompt Output:\n" + text);
+    
+    if (rtfcValidation.isCompliant) {
+      success("RTFC Framework Validation: SUCCESS");
+      success(`Compliance Score: ${rtfcValidation.score}%`);
+      success(`Validation Details: ${JSON.stringify(rtfcValidation.checks, null, 2)}`);
+    } else {
+      error("RTFC Framework Validation: FAILED");
+    }
+
+    info(
+      `System & User -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+      `Efficiency: ${metrics.durationMs} ms; ` +
+      `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+    );
+
+    info(
+      "RTFC Framework (Role, Task, Format, Context) provides structured prompt design that ensures consistent AI behavior, clear expectations, and measurable compliance across all interactions."
+    );
+  } catch (err) {
+    error(`Error running system and user prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
@@ -333,4 +389,5 @@ async function runStructuredOutputPrompting() {
   await runMultiShotPrompting();
   await runStopSequencePrompting();
   await runStructuredOutputPrompting();
+  await runSystemUserPrompting();
 })();
