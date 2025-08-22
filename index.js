@@ -8,6 +8,7 @@ import { buildOneShotPrompt } from "./src/prompts/oneShot.js";
 import { buildStopSequencePrompt, getStopSequences } from "./src/prompts/stopSequence.js";
 import { buildStructuredOutputPrompt, validateStructuredOutput } from "./src/prompts/structured.js";
 import { buildSystemUserPrompt, validateRTFCCompliance } from "./src/prompts/systemUser.js";
+import { buildTemperaturePrompt, getTemperatureSettings, analyzeTemperatureImpact } from "./src/prompts/temperature.js";
 
 async function runZeroShot() {
   try {
@@ -382,6 +383,90 @@ async function runSystemUserPrompting() {
   }
 }
 
+async function runTemperaturePrompting() {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    info("Running temperature prompting with different settings...");
+
+    const temperatureSettings = getTemperatureSettings();
+    const responses = [];
+    const metrics = [];
+
+    for (const tempSetting of temperatureSettings) {
+      info(`Testing temperature: ${tempSetting.value} (${tempSetting.name})`);
+      
+      const prompt = buildTemperaturePrompt({
+        subject: "my morning routine",
+        temperature: tempSetting.value,
+        constraints: [
+          "≤ 25 words",
+          "No NSFW or hateful content",
+          "Keep it playful"
+        ],
+        styleHints: [
+          "Prefer wordplay",
+          "Be concise",
+        ],
+        example: {
+          input: "My time management",
+          output: "Your calendar's a plot twist—every plan disappears right before the climax.",
+        }
+      });
+
+      const { ok, result, error: execError, responseMetrics } = await measureAsync(
+        `temperature-${tempSetting.value}-generateContent`,
+        async () => await model.generateContent({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: tempSetting.value
+          }
+        })
+      );
+
+      if (!ok) {
+        error(`Error with temperature ${tempSetting.value}: ${execError}`);
+        continue;
+      }
+
+      const text = result.response.text();
+      const correctness = basicCorrectnessCheck(text);
+      const usage = extractUsageMetadata(result);
+
+      responses.push(text);
+      metrics.push({
+        temperature: tempSetting.value,
+        name: tempSetting.name,
+        response: text,
+        correctness,
+        usage,
+        responseMetrics
+      });
+
+      success(`Temperature ${tempSetting.value} Output:\n${text}`);
+      
+      info(
+        `${tempSetting.name} (${tempSetting.value}) -> Correctness: ${correctness.isLikelyValid ? "likely valid" : "possibly invalid"} (${correctness.reason}); ` +
+        `Efficiency: ${responseMetrics.durationMs} ms; ` +
+        `Scalability(meta): ${usage ? `tokens prompt=${usage.promptTokenCount}, gen=${usage.candidatesTokenCount}, total=${usage.totalTokenCount}` : "n/a"}`
+      );
+    }
+
+    // Analyze temperature impact across all responses
+    const impactAnalysis = analyzeTemperatureImpact(responses.map(r => r.response));
+    success("Temperature Impact Analysis:");
+    success(impactAnalysis.summary);
+    success(`Length Variation: ${impactAnalysis.lengthVariation} words`);
+    success(`Metaphor Diversity: ${impactAnalysis.metaphorDiversity} patterns`);
+    success(`Tone Consistency: ${impactAnalysis.toneConsistency} variations`);
+
+    info(
+      "Temperature controls AI response randomness: lower values (0.1-0.3) produce consistent outputs, while higher values (0.7-0.9) generate more creative and varied responses."
+    );
+  } catch (err) {
+    error(`Error running temperature prompting: ${err?.stack || err?.message || String(err)}`);
+  }
+}
+
 (async () => {
   await runZeroShot();
   await runDynamicPrompting();
@@ -390,4 +475,5 @@ async function runSystemUserPrompting() {
   await runStopSequencePrompting();
   await runStructuredOutputPrompting();
   await runSystemUserPrompting();
+  await runTemperaturePrompting();
 })();
